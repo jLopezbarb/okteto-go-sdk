@@ -1,5 +1,5 @@
-# Okteto go sdk
-
+ 
+# Okteto go sdk
 ## Deploy preview sample
 
 In this example we are going to use okteto CLI as sdk to deploy a preview environment.
