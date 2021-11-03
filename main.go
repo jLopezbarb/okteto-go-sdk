@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	contextCMD "github.com/okteto/okteto/cmd/context"
 	"github.com/okteto/okteto/cmd/utils"
@@ -16,16 +17,16 @@ import (
 func main() {
 	ctx := context.Background()
 
-	if err := initOktetoContext(ctx); err != nil {
-		log.Fail(err.Error())
-		os.Exit(1)
-	}
-
 	previewName := ""
 	if len(os.Args) > 1 {
 		previewName = os.Args[1]
 	} else {
 		log.Fail("Preview name is needed")
+		os.Exit(1)
+	}
+
+	if err := initOktetoContext(ctx, previewName); err != nil {
+		log.Fail(err.Error())
 		os.Exit(1)
 	}
 
@@ -35,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = deployPreview(ctx, previewName, oktetoClient)
+	resp, err := deployPreview(ctx, previewName, oktetoClient)
 	if err != nil {
 		log.Fail(err.Error())
 		os.Exit(1)
@@ -43,15 +44,20 @@ func main() {
 
 	log.Information("Preview URL: %s", getPreviewURL(previewName))
 
+	if err := waitForResourcesToBeRunning(ctx, previewName, resp, oktetoClient); err != nil {
+		log.Fail(err.Error())
+		os.Exit(1)
+	}
 }
 
-func initOktetoContext(ctx context.Context) error {
+func initOktetoContext(ctx context.Context, namespace string) error {
 	oktetoToken := os.Getenv("OKTETO_TOKEN")
 	oktetoURL := os.Getenv("OKTETO_URL")
 
 	ctxOptions := &contextCMD.ContextOptions{
-		Token:   oktetoToken,
-		Context: oktetoURL,
+		Token:     oktetoToken,
+		Context:   oktetoURL,
+		Namespace: namespace,
 	}
 	if err := contextCMD.Run(ctx, ctxOptions); err != nil {
 		return err
@@ -138,4 +144,38 @@ func getPreviewURL(name string) string {
 	oktetoURL := okteto.Context().Name
 	previewURL := fmt.Sprintf("%s/#/previews/%s", oktetoURL, name)
 	return previewURL
+}
+
+func waitForResourcesToBeRunning(ctx context.Context, previewName string, resp *okteto.PreviewResponse, oktetoClient *okteto.OktetoClient) error {
+	timeout, _ := time.ParseDuration("5m")
+	for i := 1; i < 5; i++ {
+		if err := oktetoClient.WaitForActionToFinish(ctx, resp.Action.Name, timeout); err != nil {
+			return err
+		}
+	}
+
+	areAllRunning := false
+	errorsMap := make(map[string]int)
+
+	for {
+		resourceStatus, err := oktetoClient.GetResourcesStatusFromPreview(ctx, previewName)
+		if err != nil {
+			return err
+		}
+		areAllRunning = true
+		for name, status := range resourceStatus {
+			if status != "running" {
+				areAllRunning = false
+			}
+			if status == "error" {
+				errorsMap[name] = 1
+			}
+		}
+		if len(errorsMap) > 0 {
+			return fmt.Errorf("preview environment '%s' deployed with resource errors", previewName)
+		}
+		if areAllRunning {
+			return nil
+		}
+	}
 }
