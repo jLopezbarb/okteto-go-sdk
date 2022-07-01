@@ -12,6 +12,7 @@ import (
 	"github.com/okteto/okteto/pkg/log"
 	"github.com/okteto/okteto/pkg/model"
 	"github.com/okteto/okteto/pkg/okteto"
+	"github.com/okteto/okteto/pkg/types"
 )
 
 func main() {
@@ -59,13 +60,13 @@ func initOktetoContext(ctx context.Context, namespace string) error {
 		Context:   oktetoURL,
 		Namespace: namespace,
 	}
-	if err := contextCMD.Run(ctx, ctxOptions); err != nil {
+	if err := contextCMD.NewContextCommand().UseContext(ctx, ctxOptions); err != nil {
 		return err
 	}
 	return nil
 }
 
-func deployPreview(ctx context.Context, name string, oktetoClient *okteto.OktetoClient) (*okteto.PreviewResponse, error) {
+func deployPreview(ctx context.Context, name string, oktetoClient *okteto.OktetoClient) (*types.PreviewResponse, error) {
 	repository := os.Getenv("REPOSITORY")
 	branch := os.Getenv("BRANCH")
 	scope := os.Getenv("SCOPE")
@@ -82,7 +83,7 @@ func deployPreview(ctx context.Context, name string, oktetoClient *okteto.Okteto
 		return nil, err
 	}
 
-	varList := []okteto.Variable{}
+	varList := []types.Variable{}
 	if len(vars) > 0 {
 		variables := strings.Split(vars, ";")
 		for _, v := range variables {
@@ -90,7 +91,7 @@ func deployPreview(ctx context.Context, name string, oktetoClient *okteto.Okteto
 			if len(kv) != 2 {
 				return nil, fmt.Errorf("invalid variable value '%s': must follow KEY=VALUE format", v)
 			}
-			varList = append(varList, okteto.Variable{
+			varList = append(varList, types.Variable{
 				Name:  kv[0],
 				Value: kv[1],
 			})
@@ -146,10 +147,10 @@ func getPreviewURL(name string) string {
 	return previewURL
 }
 
-func waitForResourcesToBeRunning(ctx context.Context, previewName string, resp *okteto.PreviewResponse, oktetoClient *okteto.OktetoClient) error {
+func waitForResourcesToBeRunning(ctx context.Context, previewName string, resp *types.PreviewResponse, oktetoClient *okteto.OktetoClient) error {
 	timeout, _ := time.ParseDuration("5m")
 	for i := 1; i < 5; i++ {
-		if err := oktetoClient.WaitForActionToFinish(ctx, resp.Action.Name, timeout); err != nil {
+		if err := oktetoClient.WaitForActionToFinish(ctx, previewName, resp.Action.Name, timeout); err != nil {
 			return err
 		}
 	}
