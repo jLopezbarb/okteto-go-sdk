@@ -49,6 +49,7 @@ func main() {
 		log.Fail(err.Error())
 		os.Exit(1)
 	}
+	os.Exit(0)
 }
 
 func initOktetoContext(ctx context.Context, namespace string) error {
@@ -165,7 +166,7 @@ func waitForResourcesToBeRunning(ctx context.Context, previewName string, resp *
 		}
 		areAllRunning = true
 		for name, status := range resourceStatus {
-			if status != "running" {
+			if status != "running" && status != "completed" {
 				areAllRunning = false
 			}
 			if status == "error" {
